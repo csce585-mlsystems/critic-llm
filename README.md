@@ -1,6 +1,5 @@
 CSCE 585 Project: Trevor La, Nicholas Miklaucic, and Kevin Francis
 
-Please list the comments you have received in a section right at the beginning.
 Comments:
 -
 -
