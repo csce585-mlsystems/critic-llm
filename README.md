@@ -2,6 +2,12 @@
 
 A context-aware spell-check ML System that provides appropriate feedback to the user in real-time after they make an error.
 
+_Problem_
+
+_Solution_
+
+_Evaluation_
+
 _Feedback_
 
 _References_
