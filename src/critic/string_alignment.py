@@ -2,8 +2,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal
 import numpy as np
-import jax
-import torch
 from critic.kbd_layout import QWERTY
 from critic.kbd_model import KbdModel
 from keras import ops
