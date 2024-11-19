@@ -6,6 +6,8 @@ import jax
 import torch
 from critic.kbd_layout import QWERTY
 from critic.kbd_model import KbdModel
+from keras import ops
+
 
 EditKind = Literal["omit", "insert", "sub", "transpose"]
 
@@ -128,16 +130,16 @@ def total_log_prob(paths, mod: KbdModel, layout=QWERTY):
                 x1.append(list(wrong))
                 x2.append(list(right))
 
-        x0 = torch.tensor(x0)
-        x1 = torch.tensor(x1)
-        x2 = torch.tensor(x2)
-        if x0.numel():
+        x0 = ops.array(x0)
+        x1 = ops.array(x1)
+        x2 = ops.array(x2)
+        if sum(x0.shape) > 0:
             path_probs = mod.log_prob(x0, x1, x2)
-            probs.append(torch.sum(path_probs))
+            probs.append(ops.sum(path_probs))
         else:
             probs.append(0)
 
-    return torch.logsumexp(torch.tensor(probs), dim=0).item()
+    return ops.logsumexp(ops.array(probs), axis=0).item()
 
 
 def kbd_log_prob(str1, str2, mod):

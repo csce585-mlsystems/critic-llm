@@ -24,6 +24,7 @@ class LMAdapter(Corrector):
         self,
         model_name,
         base: Corrector | None = None,
+        kbd_weight: float = 1,
         leading_space: bool = True,
         model: AutoModelForCausalLM | None = None,
     ):
@@ -42,6 +43,8 @@ class LMAdapter(Corrector):
             self.base = UniformCorrector()
         else:
             self.base = base
+
+        self.kbd_weight = kbd_weight
 
     def push_word(self, word: str):
         self.prefix.append(word)
@@ -93,8 +96,9 @@ class LMAdapter(Corrector):
 
         losses = jnp.sum(log_probs * pad_mask, axis=-1)
 
-        probs = jnp.exp(jnp.log(jnp.array(corrs.probs)) + losses)
-        probs = probs / jnp.sum(probs)
+        probs = jax.nn.softmax(
+            jnp.log(jnp.array(corrs.probs)) * self.kbd_weight + losses
+        )
 
         return Corrections(corrs.words, probs)
 

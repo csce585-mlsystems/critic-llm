@@ -2,17 +2,18 @@
 Keyboard model: computes likelihood of different typing errors.
 """
 
-import torch
 import os
 
 from critic.kbd_layout import QWERTY
 
-# This guide can only be run with the JAX backend.
-os.environ["KERAS_BACKEND"] = "torch"
+os.environ["KERAS_BACKEND"] = "jax"
 
 import keras
 from keras import layers as nn
 from keras import ops
+import jax
+import jax.numpy as jnp
+from scipy.stats import multivariate_normal
 import tensorflow_probability.substrates.jax as tfp
 
 tfd = tfp.distributions
@@ -24,17 +25,20 @@ VOWELS = ops.array([list(QWERTY.get_xy(c)) for c in "aeiou"])
 class KbdModel(keras.Model):
     def __init__(self):
         super().__init__()
-        self.tilt = self.add_weight((), initializer="zeros")
-        self.aspect_ratio = self.add_weight((), initializer="zeros")
+        self.tilt = self.add_weight((), initializer="zeros", name="tilt")
+        self.aspect_ratio = self.add_weight(
+            (), initializer="zeros", name="aspect_ratio"
+        )
         # omission, insertion, substitute, transpose
-        self.category_logits = self.add_weight((4,), initializer="normal")
-        self.two_hand_logit = self.add_weight((), initializer="zeros")
-        self.vowel_logit = self.add_weight((), initializer="zeros")
-        self.scale = self.add_weight((), initializer="zeros")
+        self.category_logits = self.add_weight((4,), initializer="normal", name="oist")
+        self.two_hand_logit = self.add_weight((), initializer="zeros", name="two_hand")
+        self.vowel_logit = self.add_weight((), initializer="zeros", name="vowel")
+        self.scale = self.add_weight((), initializer="zeros", name="scale")
         self.power = self.add_weight(
             (),
             initializer=lambda shape, dtype: 2
             * keras.initializers.Ones()(shape, dtype),
+            name="power",
         )
 
     def kbd_layout_distr(self):
@@ -46,11 +50,12 @@ class KbdModel(keras.Model):
         cost = ops.cos(self.tilt)
         sint = ops.sin(self.tilt)
 
-        # R = ops.convert_to_tensor([[cost, -sint], [sint, cost]])
-        R = torch.stack([cost, -sint, sint, cost]).reshape(2, 2)
+        R = ops.convert_to_tensor([[cost, -sint], [sint, cost]])
+        # R = torch.stack([cost, -sint, sint, cost]).reshape(2, 2)
 
-        dist = torch.distributions.MultivariateNormal(
-            ops.zeros([2], dtype=torch.float32), ops.matmul(ops.matmul(R, cov), R.T)
+        dist = tfd.MultivariateNormalFullCovariance(
+            loc=ops.zeros([2], dtype="float32"),
+            covariance_matrix=ops.matmul(ops.matmul(R, cov), R.T),
         )
         return dist
 
@@ -72,16 +77,12 @@ class KbdModel(keras.Model):
     def substitute_log_prob(self, wrong_xy, right_xy):
         delta = right_xy - wrong_xy
         wrong_vowel = (
-            (wrong_xy[..., None, :] == VOWELS[None, ...].to(wrong_xy.device))
-            .all(axis=-1)
-            .any(axis=-1)
+            (wrong_xy[..., None, :] == VOWELS[None, ...]).all(axis=-1).any(axis=-1)
         )
         right_vowel = (
-            (wrong_xy[..., None, :] == VOWELS[None, ...].to(wrong_xy.device))
-            .all(axis=-1)
-            .any(axis=-1)
+            (right_xy[..., None, :] == VOWELS[None, ...]).all(axis=-1).any(axis=-1)
         )
-        vowel_prob = (wrong_vowel & right_vowel).to(torch.float32)
+        vowel_prob = wrong_vowel & right_vowel
 
         a, b = ops.log_sigmoid(self.vowel_logit), ops.log_sigmoid(-self.vowel_logit)
         vowel_prob = ops.where(vowel_prob, a, b)
@@ -92,7 +93,7 @@ class KbdModel(keras.Model):
         delta = right_xy - wrong_xy
         wrong_lh = wrong_xy[..., 0] <= 4
         right_lh = right_xy[..., 0] <= 4
-        two_hand_prob = (wrong_lh != right_lh).to(torch.float32)
+        two_hand_prob = wrong_lh != right_lh
 
         a, b = (
             ops.log_sigmoid(self.two_hand_logit),
@@ -115,12 +116,10 @@ class KbdModel(keras.Model):
             cond_probs.append(meth(wrong_xy, right_xy))
             # print(cond_probs[-1].shape)
 
-        probs = ops.array(cond_probs).to(kind.device) + self.category_probs()[
-            ..., None
-        ].to(kind.device)
+        probs = ops.array(cond_probs) + self.category_probs()[..., None]
         # print(cond_probs.shape)
 
-        probs = probs * (ops.arange(4).to(kind.device)[..., None] == kind[None, ...])
+        probs = probs * (ops.arange(4)[..., None] == kind[None, ...])
         probs = probs.sum(axis=0)
 
         return probs
@@ -158,8 +157,8 @@ if __name__ == "__main__":
 
     def process_inputs(subs):
         kind = ops.array(subs["kind_code"])
-        wrong_xy = ops.array(list(map(list, subs["wrong_xy"]))).to(torch.float32)
-        right_xy = ops.array(list(map(list, subs["right_xy"]))).to(torch.float32)
+        wrong_xy = ops.array(list(map(list, subs["wrong_xy"])))
+        right_xy = ops.array(list(map(list, subs["right_xy"])))
         return kind, wrong_xy, right_xy
 
     # mod.insertion_log_prob(*process_inputs(df.iloc[:64])[1:])
@@ -171,11 +170,10 @@ if __name__ == "__main__":
     inputs = process_inputs(subs)
     weights = ops.array(subs["weight"]) * ops.array(subs["freq"])
 
-    weights = weights / torch.mean(weights)
+    weights = weights / ops.mean(weights)
 
     def fit(epochs=25, valid_split=0.05, batch_size=256):
         mod = KbdModel()
-        mod([k[:batch_size] for k in inputs])
 
         steps_in_epoch = round(
             (inputs[0].shape[0] * (1 - valid_split)) / (batch_size) + 0.5
@@ -198,7 +196,7 @@ if __name__ == "__main__":
 
         history = mod.fit(
             inputs,
-            inputs[0].to(torch.float32) * 0,
+            inputs[0] * 0,
             batch_size=batch_size,
             epochs=epochs,
             validation_split=valid_split,
@@ -210,5 +208,5 @@ if __name__ == "__main__":
         return mod
 
     mod = fit()
-    print(mod.get_weights())
+    print(mod.get_state_tree())
     mod.save_weights("models/kbd_model.weights.h5")
