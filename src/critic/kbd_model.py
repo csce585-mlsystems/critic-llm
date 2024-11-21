@@ -2,7 +2,9 @@
 Keyboard model: computes likelihood of different typing errors.
 """
 
+from dataclasses import dataclass
 import os
+from typing import Any, Sequence
 
 from critic.kbd_layout import QWERTY
 
@@ -14,12 +16,27 @@ from keras import ops
 import jax
 import jax.numpy as jnp
 from scipy.stats import multivariate_normal
-import tensorflow_probability.substrates.jax as tfp
+# import tensorflow_probability.substrates.jax as tfp
 
-tfd = tfp.distributions
+# tfd = tfp.distributions
 
 # TODO this needs to be included in information given if we want to support different layouts
 VOWELS = ops.array([list(QWERTY.get_xy(c)) for c in "aeiou"])
+
+
+@dataclass
+class MultivariateNormal:
+    loc: Sequence[Any]
+    cov: Sequence[Any]
+
+    def log_prob(self, x0):
+        def f(x):
+            loc, cov = self.loc, self.cov
+            y = (x - loc).T @ ops.inv(cov) @ (x - loc)
+            Z = (2 * jnp.pi) ** (0.5 * cov.shape[0]) * ops.abs(ops.det(cov)) ** 0.5
+            return ops.log(ops.exp(-0.5 * y) / Z)
+
+        return jax.vmap(f)(x0)
 
 
 class KbdModel(keras.Model):
@@ -53,9 +70,13 @@ class KbdModel(keras.Model):
         R = ops.convert_to_tensor([[cost, -sint], [sint, cost]])
         # R = torch.stack([cost, -sint, sint, cost]).reshape(2, 2)
 
-        dist = tfd.MultivariateNormalFullCovariance(
+        # dist = tfd.MultivariateNormalFullCovariance(
+        #     loc=ops.zeros([2], dtype="float32"),
+        #     covariance_matrix=ops.matmul(ops.matmul(R, cov), R.T),
+        # )
+        dist = MultivariateNormal(
             loc=ops.zeros([2], dtype="float32"),
-            covariance_matrix=ops.matmul(ops.matmul(R, cov), R.T),
+            cov=ops.matmul(ops.matmul(R, cov), R.T),
         )
         return dist
 

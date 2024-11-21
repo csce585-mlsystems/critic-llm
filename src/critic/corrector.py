@@ -17,6 +17,10 @@ class Corrections:
         """Returns a sorted pd.Series."""
         return pd.Series(self.probs, self.words).sort_values(ascending=False)
 
+    def truncate(self, i: int) -> "Corrections":
+        """Truncates to the first i corrections."""
+        return Corrections(self.words[:i], self.probs[:i])
+
 
 class Corrector:
     """A model for correcting words in context."""

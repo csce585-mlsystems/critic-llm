@@ -89,7 +89,8 @@ class LlamaAdapter(Corrector):
         for suffix in suffixes:
             if self.cache_state:
                 self.model.load_state(state)
-                self.model.eval(suffix)
+                if len(suffix) > 1:
+                    self.model.eval(suffix[:-1])
             else:
                 self.model.reset()
                 self.model.eval(prefix_tokens + suffix)
@@ -111,19 +112,34 @@ class LlamaAdapter(Corrector):
 if __name__ == "__main__":
     from critic.kbd_model import KbdModel
     from critic.kbd_corrector import KbdCorrector
+    from time import perf_counter
 
     model = KbdModel()
 
     model.load_weights("models/kbd_model.weights.h5")
     kbd = KbdCorrector(model)
-    corrector = LlamaAdapter("models/llama-3.2-1b-q4_k_m.gguf", base=kbd)
+
+    llm = Llama(
+        "models/llama-3.2-1b-q4_k_m.gguf",
+        n_ctx=64,
+        n_threads=2,
+        n_threads_batch=2,
+        logits_all=True,
+        flash_attn=True,
+    )
+    corrector = LlamaAdapter(llm, base=kbd, cache_state=True)
 
     # corrector.push_words("The coverage about me in the paper gas")
 
     def show(context, word):
         corrector.clear_context()
         corrector.push_words(context)
+
+        start = perf_counter()
         corrections = corrector.correct(word)
+        end = perf_counter()
+
+        print(f"Time taken: {(end - start):.2f}")
         print(corrections.as_series())
 
         print(corrector.base.correct(word).as_series())
@@ -131,6 +147,8 @@ if __name__ == "__main__":
         # print(corrector.base.base.correct(word).as_series())
 
     show("", "Thr")
+    show("The coverage about me in the", "paper")
+    show("The coverage about", "he")
     show("The coverage about me in the paper", "gas")
 
     corrector.model.close()
