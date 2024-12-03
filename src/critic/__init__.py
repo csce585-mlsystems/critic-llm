@@ -25,7 +25,7 @@ def load_combo_corrector():
     return corrector
 
 
-def load_llama_corrector():
+def load_llama_corrector(n_threads=2, **kwargs):
     from critic.llama import Llama, LlamaAdapter
 
     model = KbdModel()
@@ -35,10 +35,12 @@ def load_llama_corrector():
     llm = Llama(
         "models/llama-3.2-1b-q4_k_m.gguf",
         n_ctx=64,
-        n_threads=2,
-        n_threads_batch=2,
+        n_threads=n_threads,
+        n_threads_batch=n_threads,
         logits_all=True,
         flash_attn=True,
+        verbose=False,
+        **kwargs,
     )
     kbd = KbdCorrector(model)
     corrector = LlamaAdapter(llm, base=kbd, cache_state=True)
