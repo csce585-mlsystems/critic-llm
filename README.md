@@ -1,5 +1,8 @@
 **Contextual Real-time Intelligent Typo Identifier & Corrector (CRITIC)**
 
+## Supplemental Video
+https://youtu.be/XUC-U5qMy1s
+
 ## Description
 A context-aware spell-check ML System that provides appropriate feedback to the user in real-time after they make an error.
 ---
