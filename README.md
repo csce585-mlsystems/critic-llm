@@ -1,4 +1,4 @@
-**Contextual Real-time Intelligent Typo Identifier & Corrector (CRITIC)**
+# **Contextual Real-time Intelligent Typo Identifier & Corrector (CRITIC)**
 
 ## Supplemental Video
 https://youtu.be/XUC-U5qMy1s
