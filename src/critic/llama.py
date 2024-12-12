@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     model = KbdModel()
 
-    model.load_weights("models/kbd_model.weights.h5")
+    model.load_weights("models/kbd_model_new.weights.h5")
     kbd = KbdCorrector(model)
 
     llm = Llama(
